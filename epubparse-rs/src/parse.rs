@@ -139,7 +139,7 @@ impl<'a> EpubArchive<'a> {
         );
         // TODO: check if this would always work
         let ncx_path = nxc_path.into_os_string().into_string().unwrap();
-        // println!("ncx path: {}", &ncx_path);
+        println!("ncx path: {}", &ncx_path);
         let ncx_text = zip.get_file_content(&ncx_path)?;
         let navigation = parse_ncx(&ncx_text)?;
 
