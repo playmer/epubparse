@@ -85,10 +85,11 @@ impl<'a> ZipArchiveWrapper<'a> {
     }
 
     fn get_file_content(&mut self, filepath: &str) -> Result<String, ParseError> {
-        let mut file = match self.zip_archive.by_name(filepath) {
+        let filepath = filepath.replace("\\", "/");
+        let mut file = match self.zip_archive.by_name(&filepath) {
             Ok(item) => item,
             Err(ZipError::FileNotFound) => {
-                return Err(ParseError::FileNotFoundInZip(filepath.to_string()))
+                return Err(ParseError::FileNotFoundInZip(filepath))
             },
             Err(err) => return Err(err.into()),
         };
