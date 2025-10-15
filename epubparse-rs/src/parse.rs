@@ -131,13 +131,19 @@ impl<'a> EpubArchive<'a> {
             .ok_or(MalformattedEpubError::MalformattedContentOpf)?;
 
         let mut nxc_path = content_opf_dir.clone();
-        nxc_path.push(
-            &content_opf
-                .manifest
-                .get("ncx")
-                .ok_or(MalformattedEpubError::MalformattedContentOpf)?
-                .href,
-        );
+
+        let ncx_href = match &content_opf.manifest.get("ncx") {
+            Some(item) => &item.href,
+            None => match &content_opf.manifest.get("toc") {
+                Some(item) => &item.href,
+                None => return Err(ParseError::EpubError(
+                    MalformattedEpubError::MalformattedContentOpf
+                ))
+            }
+        };
+
+        nxc_path.push(ncx_href);
+        
         // TODO: check if this would always work
         let ncx_path = nxc_path.into_os_string().into_string().unwrap();
         //println!("ncx path: {}", &ncx_path);
