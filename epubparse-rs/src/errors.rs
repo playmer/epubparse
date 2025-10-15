@@ -1,4 +1,4 @@
-use std::{io, string};
+use std::{io, path::PathBuf, string};
 
 use thiserror::Error;
 
@@ -14,6 +14,8 @@ pub enum ParseError {
     UTF8Error(#[from] string::FromUtf8Error),
     #[error(transparent)]
     EpubError(#[from] MalformattedEpubError),
+    #[error("File not found")]
+    FileNotFoundInZip(String),
 }
 
 /// Failure scenarios for malformatted epub file that is a valid zip file

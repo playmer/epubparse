@@ -84,8 +84,14 @@ impl<'a> ZipArchiveWrapper<'a> {
         Ok(ZipArchiveWrapper { zip_archive })
     }
 
-    fn get_file_content(&mut self, filepath: &str) -> Result<String, ZipError> {
-        let mut file = self.zip_archive.by_name(filepath)?;
+    fn get_file_content(&mut self, filepath: &str) -> Result<String, ParseError> {
+        let mut file = match self.zip_archive.by_name(filepath) {
+            Ok(item) => item,
+            Err(ZipError::FileNotFound) => {
+                return Err(ParseError::FileNotFoundInZip(filepath.to_string()))
+            },
+            Err(err) => return Err(err.into()),
+        };
         let mut buffer = String::new();
         file.read_to_string(&mut buffer)?;
         Ok(buffer)
@@ -156,7 +162,7 @@ impl<'a> EpubArchive<'a> {
                 zip.get_file_content(&full_path)
                     .map(|content| (filepath, content))
             })
-            .collect::<Result<HashMap<_, _>, ZipError>>()?;
+            .collect::<Result<HashMap<_, _>, ParseError>>()?;
 
         Ok(EpubArchive {
             zip,
