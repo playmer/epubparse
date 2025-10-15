@@ -48,7 +48,7 @@ pub struct NavPoint {
 
 pub struct TocNcx {
     // maximum of 4 is allowed
-    pub depth: usize,
+    pub depth: Option<usize>,
     // ordered list of top-level nav points
     pub nav_points: Vec<NavPoint>,
 }
@@ -143,7 +143,7 @@ impl<'a> EpubArchive<'a> {
         };
 
         nxc_path.push(ncx_href);
-        
+
         // TODO: check if this would always work
         let ncx_path = nxc_path.into_os_string().into_string().unwrap();
         //println!("ncx path: {}", &ncx_path);
@@ -417,11 +417,9 @@ fn parse_ncx(text: &str) -> Result<TocNcx, MalformattedEpubError> {
         })
         .collect();
     let depth = if depths.len() != 1 {
-        return Err(MalformattedEpubError::MalformattedTocNcx(
-            "Depth info missing or duplicated".to_string(),
-        ));
+        None
     } else {
-        *depths.get(0).unwrap()
+        Some(*depths.get(0).unwrap())
     };
     let nav_map = ncx
         .get_child("navMap")
@@ -522,7 +520,7 @@ mod tests {
     fn epub_to_flat_ncx() {
         let epub_archive = EpubArchive::new(EPUB_PAID_OFF).unwrap();
         let toc_ncx = epub_archive.navigation;
-        assert_eq!(1, toc_ncx.depth);
+        assert_eq!(Some(1), toc_ncx.depth);
         assert_eq!(14, toc_ncx.nav_points.len());
         assert_eq!(
             (1..15).collect::<Vec<usize>>(),
@@ -538,7 +536,7 @@ mod tests {
     fn epub_to_nested_ncx() {
         let epub_archive = EpubArchive::new(EPUB_SHAKESPEARES).unwrap();
         let toc_ncx = epub_archive.navigation;
-        assert_eq!(3, toc_ncx.depth);
+        assert_eq!(Some(3), toc_ncx.depth);
         assert_eq!(
             "ACT I",
             toc_ncx.nav_points[3].children[3].label.as_ref().unwrap()
