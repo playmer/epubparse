@@ -34,6 +34,13 @@ pub fn html_to_text(
             xmltree::XMLNode::Element(element) => {
                 // if stop anchor encountered, stop
                 // println!("{}", element.name);
+                if element.name == "head" {
+                    continue;
+                }
+
+                if element.name == "p" || element.name == "li" {
+                    text.push("\n".to_string());
+                }
                 if let (Some(stop), Some(name_attr)) = (stop_anchor, get_named_anchor(element)) {
                     if stop == name_attr {
                         break;

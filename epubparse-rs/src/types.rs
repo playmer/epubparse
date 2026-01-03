@@ -7,6 +7,7 @@ pub struct Book {
     pub author: Option<String>,
     pub preface_content: String,
     pub chapters: Vec<Chapter>,
+    pub cover: Option<(Vec<u8>, String)>
 }
 
 /// A chapter within a book

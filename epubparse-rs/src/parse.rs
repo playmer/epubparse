@@ -1,5 +1,5 @@
 use std::io::Read;
-use std::{collections::HashMap, io, path::PathBuf};
+use std::{collections::HashMap, io, path::{Path, PathBuf}};
 
 use io::Cursor;
 use regex::Regex;
@@ -34,6 +34,7 @@ pub struct ContentOPF {
     pub language: String,
     pub manifest: Manifest,
     pub spine: Spine,
+    pub cover: Option<(Vec<u8>, String)>
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -83,6 +84,20 @@ impl<'a> ZipArchiveWrapper<'a> {
         let zip_archive = ZipArchive::new(reader)?;
         Ok(ZipArchiveWrapper { zip_archive })
     }
+    
+    fn get_binary_content(&mut self, filepath: &str) -> Result<Vec<u8>, ParseError> {
+        let filepath = filepath.replace("\\", "/");
+        let mut file = match self.zip_archive.by_name(&filepath) {
+            Ok(item) => item,
+            Err(ZipError::FileNotFound) => {
+                return Err(ParseError::FileNotFoundInZip(filepath))
+            },
+            Err(err) => return Err(err.into()),
+        };
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer).unwrap();
+        Ok(buffer)
+    }
 
     fn get_file_content(&mut self, filepath: &str) -> Result<String, ParseError> {
         let filepath = filepath.replace("\\", "/");
@@ -127,7 +142,7 @@ impl<'a> EpubArchive<'a> {
             None => PathBuf::new(),
         };
         let content_opf_text = zip.get_file_content(&content_opf_path)?;
-        let content_opf = parse_content_opf(&content_opf_text)
+        let content_opf = parse_content_opf(&mut zip, &content_opf_dir, &content_opf_text)
             .ok_or(MalformattedEpubError::MalformattedContentOpf)?;
 
         let mut nxc_path = content_opf_dir.clone();
@@ -136,9 +151,12 @@ impl<'a> EpubArchive<'a> {
             Some(item) => &item.href,
             None => match &content_opf.manifest.get("toc") {
                 Some(item) => &item.href,
-                None => return Err(ParseError::EpubError(
-                    MalformattedEpubError::MalformattedContentOpf
-                ))
+                None =>  match &content_opf.manifest.get("toc_ncx") {
+                    Some(item) => &item.href,
+                    None => return Err(ParseError::EpubError(
+                        MalformattedEpubError::MalformattedContentOpf
+                    ))
+                }
             }
         };
 
@@ -187,6 +205,7 @@ impl<'a> EpubArchive<'a> {
             author: self.content_opf.author.clone(),
             preface_content,
             chapters,
+            cover: self.content_opf.cover.clone()
         })
     }
 
@@ -472,7 +491,58 @@ pub fn parse_spine(spine: &Element) -> Option<Spine> {
     )
 }
 
-fn parse_content_opf(text: &str) -> Option<ContentOPF> {
+fn find_cover(zip: &mut ZipArchiveWrapper, content_opf_dir: &Path, element: &Element, manifest: &HashMap<String, ManifestItem>) -> Option<(Vec<u8>, String)> {
+    let mut cover_id: Option<String> = None;
+
+    for child in element.children.iter().filter_map(|e| e.as_element()) {        
+        if child.name != "meta" ||                            // Only looking at meta entries
+           !child.attributes.contains_key("name") ||          // Must have a name attribute
+           !child.attributes.contains_key("content") ||       // Must have a content attribute
+           child.attributes.get("name").unwrap() != "cover" { // Name attribute must be "cover"
+            continue;
+        }
+        
+        cover_id = Some(child.attributes.get("content").unwrap().clone());
+        break;
+    }
+
+    let cover_id = if let Some(cover_id) = cover_id {
+        cover_id
+    } else {
+        return None;
+    };
+
+    let cover_href = if let Some(cover_entry) = &manifest.get(&cover_id) {
+        cover_entry.href.clone()
+    } else {
+        let mut cover_href: Option<String> = None;
+
+        for manifest_entry in manifest.values() {
+            if let Some(props) = &manifest_entry.properties {
+                if *props == cover_id {
+                    cover_href = Some(manifest_entry.href.clone());
+                    break;
+                }
+            }
+        }
+
+        if let None = cover_href {
+            return None;
+        };
+
+        cover_href.unwrap()
+    };
+    
+    let full_cover_path = content_opf_dir.join(&cover_href).to_str().unwrap().to_string();
+        
+    if let Ok(data) = zip.get_binary_content(&full_cover_path) {
+        return Some((data, cover_href.clone()));
+    }
+
+    return None
+}
+
+fn parse_content_opf(zip: &mut ZipArchiveWrapper, content_opf_dir: &Path, text: &str) -> Option<ContentOPF> {
     let package = xmltree::Element::parse_with_config(text.as_bytes(), get_parser_config()).ok()?;
     let metadata = package.get_child("metadata")?;
     let manifest = package.get_child("manifest")?;
@@ -486,12 +556,15 @@ fn parse_content_opf(text: &str) -> Option<ContentOPF> {
     let language = metadata.get_child("language")?.get_text()?.to_string();
     let manifest = parse_manifest(manifest);
     let spine = parse_spine(spine)?;
+    let cover = find_cover(zip, content_opf_dir, metadata, &manifest);
+
     Some(ContentOPF {
         title,
         author,
         language,
         manifest,
         spine,
+        cover
     })
 }
 
@@ -659,6 +732,7 @@ mod tests {
             author: Some(expected_author),
             preface_content: "".to_string(),
             chapters: expected_chapters,
+            cover: None
         };
 
         let epub_archive = EpubArchive::new(EPUB_NESTED).unwrap();
