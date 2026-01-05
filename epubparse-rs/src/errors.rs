@@ -16,6 +16,8 @@ pub enum ParseError {
     EpubError(#[from] MalformattedEpubError),
     #[error("File not found")]
     FileNotFoundInZip(String),
+    #[error("File not read")]
+    FileNotReadInZip(String),
 }
 
 /// Failure scenarios for malformatted epub file that is a valid zip file

@@ -106,11 +106,21 @@ impl<'a> ZipArchiveWrapper<'a> {
             Err(ZipError::FileNotFound) => {
                 return Err(ParseError::FileNotFoundInZip(filepath))
             },
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                return Err(err.into())
+            },
         };
         let mut buffer = String::new();
-        file.read_to_string(&mut buffer)?;
-        Ok(buffer)
+
+        match file.read_to_string(&mut buffer) {
+            Ok(_buffer_read) => {
+                return Ok(buffer);
+            }
+            Err(_err) => {
+                println!("file{} err;  {}", filepath, _err);
+                return Err(ParseError::FileNotReadInZip(filepath));
+            }
+        }
     }
 
     fn get_filenames(&self) -> Vec<String> {
